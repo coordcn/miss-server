@@ -2,13 +2,16 @@
 -- @author      QianYe(coordcn@163.com)
 -- @license     MIT license
 
+local Request   = require("miss-server.src.request")
+local Response  = require("miss-server.src.response")
+
 local core      = require("miss-core")
 local Object    = core.Object
 local utils     = core.utils
 
 local router    = require("miss-router")
 local Router    = router.Router
-local handle    = router.handle
+local execute   = router.execute
 
 local Server = Object:extend()
 
@@ -34,29 +37,23 @@ function Server:run()
     local path      = ngx.var.uri
     local method    = ngx.var.request_method
 
-    ngx.log(ngx.ERR, nil)
-    ngx.log(ngx.ERR, true)
-
     local handles, params = self.router:find(method, path)
 
     if handles then
+        local req = Request:new(path, method, params, self.options)
+        local res = Response:new(method)
+
+        execute(self.beforeHandles, handles, self.afterHandles, req, res)
+        
+        local ret = res:_output()
+        if ret == false then
+            ngx.log(ngx.ERR, res.error)
+            ngx.exit(res.status)
+            return
+        end
     else
+        ngx.exit(404)
     end
-
-
-    -- ngx.status
-    -- ngx.header
-    local headers = ngx.req.get_headers()
-    -- number second.ms
-    local startTime = ngx.req.start_time()
-    -- number 2.0 1.1 1.0 0.9
-    local httpVersion = ngx.req.http_version()
-    local req_uri = ngx.var.request_uri
-
-
-end
-
-function Server:error(status, handle)
 end
 
 function Server:before(handle)
