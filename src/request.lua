@@ -9,6 +9,7 @@ local MIME      = core.MIME
 local xml       = core.xml
 local cookie    = core.cookie
 local upload    = core.upload
+local utils     = core.utils
 
 local validator = require("miss-validator")
 local verify    = validator.verify
@@ -21,17 +22,33 @@ local ERR_NOT_FORM  = "content type is not " .. MIME.FORM .. " or " .. MIME.MULT
 
 local Request   = Object:extend()
 
-function Request:constructor(input)
-    self.options    = input.options
-    self.method     = input.method
-    self.uri        = input.uri
-    self.path       = input.path
+function Request:constructor(path, method, params, options)
+    self.options    = options
+    self.method     = method
+    self.path       = path
     -- path params
-    self.params     = input.params
-    self.type       = input.type
-    self.length     = input.length
-    self.charset    = input.charset
-    self.headers    = input.headers
+    self.params     = params
+
+    self.uri        = ngx.var.request_uri
+    -- number 2.0 1.1 1.0 0.9
+    self.version    = ngx.req.http_version()
+    self.start      = ngx.req.start_time()
+
+    local headers   = ngx.req.get_headers()
+    self.headers    = headers
+
+    local length    = headers["Content-Length"]
+    if length then
+        self.length = tonumber(length)
+    end
+
+    local ctype     = headers["Content-Type"]
+    if ctype then
+        local charset
+        ctype, charset = utils.parseContentType(ctype)
+        self.type       = ctype
+        self.charset    = charset
+    end
 
     self.scheme     = ngx.var.scheme
     self.host       = ngx.var.host
@@ -56,26 +73,11 @@ function Request:getSocket()
 end
 
 function Request:getHeaders()
-    if self.headers then
-        return self.headers
-    else
-        local headers   = ngx.req.get_headers()
-        self.headers    = headers
-        return headers
-    end
+    return self.headers
 end
 
 function Request:getHeader(name)
-    local tmp
-
-    if self.headers then
-        tmp = self.headers[name]
-    else
-        local headers   = ngx.req.get_headers()
-        self.headers    = headers
-        tmp = headers[name]
-    end
-
+    local tmp = self.headers[name]
     if type(tmp) == "table" then
         return tmp[1]
     else
